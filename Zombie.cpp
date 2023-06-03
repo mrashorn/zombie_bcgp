@@ -42,7 +42,7 @@ void Zombie::spawn(float startX, float startY, int type, int seed)
 	float modifier = (rand() % MAX_VARIANCE) + OFFSET;
 
 	// Express this as a fraction of 1
-	modifier /= 100; // now equals between .7 and 1
+	modifier /= 100.0; // now equals between .7 and 1
 	m_Speed *= modifier;
 
 	// Initialize its location
@@ -54,6 +54,9 @@ void Zombie::spawn(float startX, float startY, int type, int seed)
 
 	// Set its position
 	m_Sprite.setPosition(m_Position);
+
+	// Make the zombie alive
+	m_Alive = true;
 }
 
 bool Zombie::hit()
