@@ -1,7 +1,9 @@
 // main.cpp being used in place of ZombieArena.cpp
 
 #include <sstream>
+#include <fstream>
 #include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
 #include "Player.h"
 #include "ZombieArena.h"
 #include "TextureHolder.h"
@@ -64,7 +66,7 @@ int main()
 	// 100 bullets to start
 	Bullet bullets[100];
 	int currentBullet = 0;
-	int bulletsSpare = 24;
+	int bulletsSpare = 36;
 	int bulletsInClip = 6;
 	int clipSize = 6;
 	float fireRate = 1;
@@ -150,6 +152,15 @@ int main()
 	scoreText.setFillColor(Color::White);
 	scoreText.setPosition(20, 0);
 
+	// Load the high score from a text file
+	std::ifstream inputFile("gamedata/scores.txt"); // pass file name to ifstream constructor
+	if (inputFile.is_open())
+	{
+		// >> Reads the data
+		inputFile >> hiScore;
+		inputFile.close();
+	}
+
 	// Hi score
 	Text hiScoreText;
 	hiScoreText.setFont(font);
@@ -188,6 +199,50 @@ int main()
 	// How often (in frames) should we update the HUD?
 	int fpsMeasurementFrameInterval = 100;
 
+	// Preparing the sounds
+	// Prepare the hit sound
+	SoundBuffer hitBuffer;
+	hitBuffer.loadFromFile("sound/hit.wav");
+	Sound hit;
+	hit.setBuffer(hitBuffer);
+
+	// Prepare the splat sound
+	SoundBuffer splatBuffer;
+	splatBuffer.loadFromFile("sound/splat.wav");
+	Sound splat;
+	splat.setBuffer(splatBuffer);
+	
+	// Prepare the shoot sound
+	SoundBuffer shootBuffer;
+	shootBuffer.loadFromFile("sound/shoot.wav");
+	Sound shoot;
+	shoot.setBuffer(shootBuffer);
+
+	// Prepare the reload sound
+	SoundBuffer reloadBuffer;
+	reloadBuffer.loadFromFile("sound/reload.wav");
+	Sound reload;
+	reload.setBuffer(reloadBuffer);
+
+	// Prepare the failed reload sound
+	SoundBuffer reloadFailedBuffer;
+	reloadFailedBuffer.loadFromFile("sound/reload_failed.wav");
+	Sound reloadFailed;
+	reloadFailed.setBuffer(reloadFailedBuffer);
+
+	// Prepare the powerup sound
+	SoundBuffer powerupBuffer;
+	powerupBuffer.loadFromFile("sound/powerup.wav");
+	Sound powerup;
+	powerup.setBuffer(powerupBuffer);
+
+	// Prepare the pickup sound
+	SoundBuffer pickupBuffer;
+	pickupBuffer.loadFromFile("sound/pickup.wav");
+	Sound pickup;
+	pickup.setBuffer(pickupBuffer);
+
+
 	
 
 	// The main game loop
@@ -223,6 +278,18 @@ int main()
 				else if(event.key.code == Keyboard::Return && state == State::GAME_OVER)
 				{
 					state = State::LEVELING_UP;
+					wave = 0;
+					score = 0;
+
+					// Prepare the gun and ammo for the next game
+					currentBullet = 0;
+					bulletsSpare = 36;
+					bulletsInClip = 6;
+					clipSize = 6;
+					fireRate = 1;
+
+					// Reset the player's stats
+					player.resetPlayerStats();
 				}
 
 				if(state == State::PLAYING)
@@ -235,16 +302,19 @@ int main()
 							// Plenty of bullets. Go ahead and Reload. 
 							bulletsInClip = clipSize;
 							bulletsSpare -= clipSize;
+							reload.play();
 						}
 						else if(bulletsSpare > 0)
 						{
 							// Only a few bullets left
 							bulletsInClip = bulletsSpare;
 							bulletsSpare = 0;
+							reload.play();
 						}
 						else // don't actually need to do anything since they have no bullets left
 						{
 							// More here soon?
+							reloadFailed.play();
 						}
 					} // end reloading event.key.code = R;
 
@@ -317,6 +387,8 @@ int main()
 					}
 					lastPressed = gameTimeTotal;
 					
+					shoot.play();
+					
 					bulletsInClip--;
 				}
 			} // End Fire a bullet
@@ -329,39 +401,54 @@ int main()
 			// Handle the player LEVELING up
 			if(event.key.code == Keyboard::Num1)
 			{
+				// Increase fire rate
+				fireRate++;
 				state = State::PLAYING;
 			}
 
 			if(event.key.code == Keyboard::Num2)
 			{
+				// Increase clip size
+				clipSize += clipSize;
 				state = State::PLAYING;
 			}
 
 			if(event.key.code == Keyboard::Num3)
 			{
+				// Increase Health
+				player.upgradeHealth();
 				state = State::PLAYING;
 			}
 
 			if(event.key.code == Keyboard::Num4)
 			{
+				// Increase speed
+				player.upgradeSpeed();
 				state = State::PLAYING;
 			}
 
 			if(event.key.code == Keyboard::Num5)
 			{
+				// Upgrade pickup health
+				healthPickup.upgrade();
 				state = State::PLAYING;
 			}
 
 			if(event.key.code == Keyboard::Num6)
 			{
+				// Upgrade pickup ammo
+				ammoPickup.upgrade();
 				state = State::PLAYING;
 			}
 
 			if(state == State::PLAYING)
 			{
+				// Increase the wave number
+				wave++;
+
 				// Prepare the level
-				arena.width = 500;
-				arena.height = 500;
+				arena.width = 500 * wave;
+				arena.height = 500 * wave;
 				arena.left = 0;
 				arena.top = 0;
 
@@ -376,12 +463,15 @@ int main()
 				ammoPickup.setArena(arena);
 
 				// Create a horde of zombies
-				numZombies = 10;
+				numZombies = 4 * wave;
 
 				// Delete the previously allocated memory (if it exists)
 				delete[] zombies;
 				zombies = createHorde(numZombies, arena);
 				numZombiesAlive = numZombies;
+
+				// play the powerup sound
+				powerup.play();
 
 				// Reset the clock so there isn't a frame jump
 				clock.restart();
@@ -474,6 +564,8 @@ int main()
 									state = State::LEVELING_UP;
 								}
 							}
+							// make the splat sound when bullet hits zombie
+							splat.play();
 						}
 					}
 				}
@@ -487,11 +579,18 @@ int main()
 				if (player.hit(gameTimeTotal))
 				{
 					// More here later
+					hit.play();
 				}
 
 				if (player.getHealth() <= 0)
 				{
 					state = State::GAME_OVER;
+
+					std::ofstream outputFile("gamedata/scores.txt"); // pass the file name to the constructor of ofstream
+					// << writes the data
+					outputFile << hiScore;
+					outputFile.close();
+					
 				}
 			}
 		} // end player touched 
@@ -501,6 +600,8 @@ int main()
 				healthPickup.isSpawned())
 		{
 			player.increaseHealthLevel(healthPickup.gotIt());
+			// Play the sound
+			pickup.play();
 		}
 
 		// Has the player touched ammo pickup
@@ -508,6 +609,8 @@ int main()
 				ammoPickup.isSpawned())
 		{
 			bulletsSpare += ammoPickup.gotIt();
+			// Play the sound
+			reload.play();
 		}
 
 		// size up the health bar
